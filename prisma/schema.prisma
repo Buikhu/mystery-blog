@@ -1,0 +1,24 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Post {
+  id           Int      @id @default(autoincrement())
+  title        String
+  slug         String   @unique
+  summary      String
+  content      String   @db.Text
+  sources      String?  @db.Text
+  thumbnailUrl String
+  category     String
+  tags         String[]
+  isPublished  Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
