@@ -1,9 +1,14 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+
 import { supabase } from "@/lib/supabase";
+
 import { redirect } from "next/navigation";
+
 import { requireAdmin } from "@/lib/auth";
+
+import { revalidatePath } from "next/cache";
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
@@ -45,6 +50,7 @@ export async function uploadImage(formData: FormData) {
   const image = validateImage(formData.get("image"));
 
   const fileName = createFileName(image);
+
   const filePath = `articles/${fileName}`;
 
   const fileBuffer = await image.arrayBuffer();
@@ -87,11 +93,17 @@ export async function createPost(formData: FormData) {
   await requireAdmin();
 
   const title = formData.get("title")?.toString().trim();
+
   const slug = formData.get("slug")?.toString().trim();
+
   const category = formData.get("category")?.toString().trim();
+
   const summary = formData.get("summary")?.toString().trim();
+
   const sources = formData.get("sources")?.toString().trim();
+
   const tagsInput = formData.get("tags")?.toString().trim();
+
   const content = formData.get("content")?.toString().trim();
 
   const isPublished =
@@ -118,6 +130,7 @@ export async function createPost(formData: FormData) {
   /* Upload thumbnail */
 
   const fileName = createFileName(thumbnail);
+
   const filePath = `thumbnails/${fileName}`;
 
   const fileBuffer = await thumbnail.arrayBuffer();
@@ -173,6 +186,13 @@ export async function createPost(formData: FormData) {
     },
   });
 
+  /* Clear cache */
+
+  revalidatePath("/");
+  revalidatePath("/admin");
+  revalidatePath("/category/[slug]", "page");
+  revalidatePath(`/posts/${slug}`);
+
   redirect("/admin");
 }
 
@@ -186,16 +206,22 @@ export async function updatePost(formData: FormData) {
   const id = Number(formData.get("id"));
 
   const title = formData.get("title")?.toString().trim();
+
   const slug = formData.get("slug")?.toString().trim();
+
   const category = formData.get("category")?.toString().trim();
+
   const summary = formData.get("summary")?.toString().trim();
+
   const sources = formData.get("sources")?.toString().trim();
+
   const thumbnailUrl = formData
     .get("thumbnailUrl")
     ?.toString()
     .trim();
 
   const tagsInput = formData.get("tags")?.toString().trim();
+
   const content = formData.get("content")?.toString().trim();
 
   const isPublished =
@@ -217,6 +243,17 @@ export async function updatePost(formData: FormData) {
     );
   }
 
+  /* Get old slug */
+
+  const oldPost = await prisma.post.findUnique({
+    where: {
+      id,
+    },
+    select: {
+      slug: true,
+    },
+  });
+
   /* Convert tags */
 
   const tags = tagsInput
@@ -232,7 +269,6 @@ export async function updatePost(formData: FormData) {
     where: {
       id,
     },
-
     data: {
       title,
       slug,
@@ -245,6 +281,19 @@ export async function updatePost(formData: FormData) {
       isPublished,
     },
   });
+
+  /* Clear cache */
+
+  revalidatePath("/");
+  revalidatePath("/admin");
+  revalidatePath("/category/[slug]", "page");
+  revalidatePath(`/posts/${slug}`);
+
+  /* Clear old post URL if slug changed */
+
+  if (oldPost && oldPost.slug !== slug) {
+    revalidatePath(`/posts/${oldPost.slug}`);
+  }
 
   redirect("/admin");
 }
@@ -262,11 +311,33 @@ export async function deletePost(formData: FormData) {
     throw new Error("Invalid post ID.");
   }
 
+  /* Get post slug before deleting */
+
+  const post = await prisma.post.findUnique({
+    where: {
+      id,
+    },
+    select: {
+      slug: true,
+    },
+  });
+
+  if (!post) {
+    throw new Error("Post not found.");
+  }
+
   await prisma.post.delete({
     where: {
       id,
     },
   });
+
+  /* Clear cache */
+
+  revalidatePath("/");
+  revalidatePath("/admin");
+  revalidatePath("/category/[slug]", "page");
+  revalidatePath(`/posts/${post.slug}`);
 
   redirect("/admin");
 }

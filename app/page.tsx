@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { prisma } from "@/lib/prisma";
+export const revalidate = 0;
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ||
