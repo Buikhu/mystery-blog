@@ -38,9 +38,9 @@ export default function ContactPage() {
 
         <p>
           <strong>Email:</strong>{" "}
-          <a href="mailto:contact@mysteryarchive.com">
-            contact@mysteryarchive.com
-          </a>
+          <a href="mailto:buiduckhu2@gmail.com"> 
+            buiduckhu2@gmail.com 
+            </a>
         </p>
 
         <h2>Corrections</h2>
