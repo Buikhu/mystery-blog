@@ -1,3 +1,4 @@
+
 import type { Metadata } from "next";
 import "./globals.css";
 
@@ -56,6 +57,15 @@ export const metadata: Metadata = {
 
     description:
       "Explore unsolved historical mysteries, strange events, unexplained disappearances, and bizarre figures from the past.",
+
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "The Mystery Archive - Unsolved Historical Mysteries",
+      },
+    ],
   },
 
   twitter: {
@@ -66,6 +76,8 @@ export const metadata: Metadata = {
 
     description:
       "Explore unsolved historical mysteries, strange events, unexplained disappearances, and bizarre figures from the past.",
+
+    images: ["/og-image.png"],
   },
 
   robots: {
