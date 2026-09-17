@@ -47,26 +47,26 @@ export const metadata: Metadata = {
   },
 
   openGraph: {
-    type: "website",
-    locale: "en_US",
-    url: siteUrl,
-    siteName: "Mystery Archive",
+  type: "website",
+  locale: "en_US",
+  url: siteUrl,
+  siteName: "Mystery Archive",
 
-    title:
-      "Mystery Archive | Unsolved Historical Mysteries",
+  title:
+    "Mystery Archive | Unsolved Historical Mysteries",
 
-    description:
-      "Explore unsolved historical mysteries, strange events, unexplained disappearances, and bizarre figures from the past.",
+  description:
+    "Explore unsolved historical mysteries, strange events, unexplained disappearances, and bizarre figures from the past.",
 
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "The Mystery Archive - Unsolved Historical Mysteries",
-      },
-    ],
-  },
+  images: [
+    {
+      url: "https://themysteryarchive.com/og-image.png",
+      width: 1200,
+      height: 630,
+      alt: "The Mystery Archive - Unsolved Historical Mysteries",
+    },
+  ],
+},
 
   twitter: {
     card: "summary_large_image",
