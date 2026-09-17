@@ -51,6 +51,8 @@ export async function generateMetadata({
 
     description: post.summary,
 
+    metadataBase: new URL(siteUrl),
+
     keywords: [
       post.category,
       ...post.tags,
@@ -94,6 +96,7 @@ export async function generateMetadata({
           width: 1200,
           height: 630,
           alt: post.title,
+          type: "image/png",
         },
       ],
     },
@@ -127,7 +130,6 @@ export async function generateMetadata({
     },
   };
 }
-
 /* =========================================================
    PAGE
 ========================================================= */
