@@ -27,15 +27,28 @@ export const metadata: Metadata = {
     title: "Unsolved Historical Mysteries & Strange Events",
     description: siteDescription,
     type: "website",
-    url: "/",
+    url: siteUrl,
     siteName: "Mystery Archive",
     locale: "en_US",
+
+    images: [
+      {
+        url: "https://themysteryarchive.com/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "The Mystery Archive - Unsolved Historical Mysteries",
+      },
+    ],
   },
 
   twitter: {
     card: "summary_large_image",
     title: "Unsolved Historical Mysteries & Strange Events",
     description: siteDescription,
+
+    images: [
+      "https://themysteryarchive.com/og-image.png",
+    ],
   },
 
   robots: {
@@ -51,6 +64,7 @@ export const metadata: Metadata = {
     },
   },
 };
+
 
 export default async function HomePage() {
   const posts = await prisma.post.findMany({
