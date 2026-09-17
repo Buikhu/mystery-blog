@@ -90,26 +90,40 @@ export async function generateMetadata({
     },
 
     openGraph: {
-      title,
+  title,
 
-      description: category.description,
+  description: category.description,
 
-      url: canonicalUrl,
+  url: canonicalUrl,
 
-      siteName: "Mystery Archive",
+  siteName: "Mystery Archive",
 
-      type: "website",
+  type: "website",
 
-      locale: "en_US",
+  locale: "en_US",
+
+  images: [
+    {
+      url: "https://themysteryarchive.com/og-image.png",
+      width: 1200,
+      height: 630,
+      alt: `${category.name} - Mystery Archive`,
+      type: "image/png",
     },
+  ],
+},
 
     twitter: {
-      card: "summary_large_image",
+  card: "summary_large_image",
 
-      title,
+  title,
 
-      description: category.description,
-    },
+  description: category.description,
+
+  images: [
+    "https://themysteryarchive.com/og-image.png",
+  ],
+},
 
     robots: {
       index: true,
