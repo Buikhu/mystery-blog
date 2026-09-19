@@ -1,10 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { createPost, uploadImage } from "../actions";
+
+/* =========================================================
+   SLUG
+   ========================================================= */
 
 function createSlug(text: string) {
   return text
@@ -18,28 +22,45 @@ function createSlug(text: string) {
     .replace(/-+/g, "-");
 }
 
+/* =========================================================
+   PAGE
+   ========================================================= */
+
 export default function NewPostPage() {
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
 
-  const [category, setCategory] = useState("Unsolved Mysteries");
+  const [category, setCategory] =
+    useState("Unsolved Mysteries");
+
   const [summary, setSummary] = useState("");
   const [sources, setSources] = useState("");
 
-  const [thumbnail, setThumbnail] = useState<File | null>(null);
-  const [thumbnailPreview, setThumbnailPreview] = useState("");
+  const [thumbnail, setThumbnail] =
+    useState<File | null>(null);
+
+  const [thumbnailPreview, setThumbnailPreview] =
+    useState("");
 
   const [tags, setTags] = useState("");
   const [content, setContent] = useState("");
 
   const [isPublished, setIsPublished] = useState(true);
-  const [preview, setPreview] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
 
-  const generatedSlug = useMemo(() => {
-    return createSlug(title);
-  }, [title]);
+  const [preview, setPreview] = useState(false);
+
+  const [uploadingImage, setUploadingImage] =
+    useState(false);
+
+  const [submitting, setSubmitting] =
+    useState(false);
+
+  const [error, setError] = useState("");
+
+  /* =========================================================
+     TITLE
+     ========================================================= */
 
   function handleTitleChange(value: string) {
     setTitle(value);
@@ -49,10 +70,18 @@ export default function NewPostPage() {
     }
   }
 
+  /* =========================================================
+     SLUG
+     ========================================================= */
+
   function handleSlugChange(value: string) {
     setSlugEdited(true);
     setSlug(createSlug(value));
   }
+
+  /* =========================================================
+     THUMBNAIL
+     ========================================================= */
 
   function handleThumbnailChange(
     event: React.ChangeEvent<HTMLInputElement>
@@ -78,8 +107,13 @@ export default function NewPostPage() {
     setThumbnail(file);
 
     const previewUrl = URL.createObjectURL(file);
+
     setThumbnailPreview(previewUrl);
   }
+
+  /* =========================================================
+     CONTENT IMAGE UPLOAD
+     ========================================================= */
 
   async function handleContentImageUpload(
     event: React.ChangeEvent<HTMLInputElement>
@@ -106,6 +140,7 @@ export default function NewPostPage() {
 
     try {
       const formData = new FormData();
+
       formData.append("image", file);
 
       const result = await uploadImage(formData);
@@ -113,24 +148,29 @@ export default function NewPostPage() {
       const imageMarkdown =
         `\n\n![${file.name}](${result.url})\n\n`;
 
-      const textarea = document.getElementById(
-        "content"
-      ) as HTMLTextAreaElement | null;
+      const textarea =
+        document.getElementById(
+          "content"
+        ) as HTMLTextAreaElement | null;
 
       if (!textarea) {
-        setContent((current) => current + imageMarkdown);
+        setContent(
+          (current) => current + imageMarkdown
+        );
+
         return;
       }
 
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
 
-      const newContent =
-        content.slice(0, start) +
-        imageMarkdown +
-        content.slice(end);
-
-      setContent(newContent);
+      setContent((current) => {
+        return (
+          current.slice(0, start) +
+          imageMarkdown +
+          current.slice(end)
+        );
+      });
 
       requestAnimationFrame(() => {
         textarea.focus();
@@ -144,17 +184,59 @@ export default function NewPostPage() {
         );
       });
     } catch (error) {
-      console.error(error);
-      alert("Failed to upload image.");
+      console.error(
+        "Content image upload error:",
+        error
+      );
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to upload image."
+      );
     } finally {
       setUploadingImage(false);
+
       event.target.value = "";
     }
   }
 
+  /* =========================================================
+     SUBMIT
+     ========================================================= */
+
+  async function handleSubmit(formData: FormData) {
+    if (submitting) {
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+
+    try {
+      await createPost(formData);
+    } catch (error) {
+      console.error("Create post error:", error);
+
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError("Failed to create post.");
+      }
+
+      setSubmitting(false);
+    }
+  }
+
+  /* =========================================================
+     RENDER
+     ========================================================= */
+
   return (
     <main className="min-h-screen bg-[#f5f1e8] text-[#172033]">
-      {/* ADMIN HEADER */}
+      {/* =====================================================
+          ADMIN HEADER
+          ===================================================== */}
 
       <header className="border-b border-[#d8d0c0] bg-[#172033] text-[#f5f1e8]">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-5 sm:px-6 lg:px-8">
@@ -180,6 +262,10 @@ export default function NewPostPage() {
         </div>
       </header>
 
+      {/* =====================================================
+          PAGE
+          ===================================================== */}
+
       <div className="mx-auto max-w-7xl px-5 py-8 sm:px-6 lg:px-8">
         {/* PAGE TITLE */}
 
@@ -199,8 +285,8 @@ export default function NewPostPage() {
               </h1>
 
               <p className="mt-2 text-sm text-[#6b6b65]">
-                Paste your AI-generated Markdown and publish it to
-                the archive.
+                Paste your AI-generated Markdown and publish
+                it to the archive.
               </p>
             </div>
 
@@ -210,8 +296,31 @@ export default function NewPostPage() {
           </div>
         </div>
 
-        <form action={createPost} className="space-y-6">
-          {/* STORY INFORMATION */}
+        {/* =================================================
+            FORM
+            ================================================= */}
+
+        <form
+          action={handleSubmit}
+          className="space-y-6"
+        >
+          {/* =================================================
+              ERROR
+              ================================================= */}
+
+          {error && (
+            <div className="rounded-xl border border-red-300 bg-red-50 px-5 py-4 text-sm text-red-700 shadow-sm">
+              <p className="font-bold">
+                Failed to create post
+              </p>
+
+              <p className="mt-1">{error}</p>
+            </div>
+          )}
+
+          {/* =================================================
+              STORY INFORMATION
+              ================================================= */}
 
           <section className="rounded-xl border border-[#d8d0c0] bg-[#fffdf8] shadow-sm">
             <div className="border-b border-[#e5dfd4] px-5 py-4 sm:px-6">
@@ -239,6 +348,7 @@ export default function NewPostPage() {
                 <input
                   id="title"
                   name="title"
+                  type="text"
                   value={title}
                   onChange={(event) =>
                     handleTitleChange(event.target.value)
@@ -262,6 +372,7 @@ export default function NewPostPage() {
                 <input
                   id="slug"
                   name="slug"
+                  type="text"
                   value={slug}
                   onChange={(event) =>
                     handleSlugChange(event.target.value)
@@ -273,7 +384,7 @@ export default function NewPostPage() {
 
                 <p className="mt-2 text-[11px] text-[#99968e]">
                   URL: /posts/
-                  {slug || generatedSlug || "your-story"}
+                  {slug || "your-story"}
                 </p>
               </div>
 
@@ -323,6 +434,7 @@ export default function NewPostPage() {
                   <input
                     id="tags"
                     name="tags"
+                    type="text"
                     value={tags}
                     onChange={(event) =>
                       setTags(event.target.value)
@@ -445,7 +557,9 @@ export default function NewPostPage() {
             </div>
           </section>
 
-          {/* MARKDOWN EDITOR */}
+          {/* =================================================
+              MARKDOWN EDITOR
+              ================================================= */}
 
           <section className="overflow-hidden rounded-xl border border-[#d8d0c0] bg-[#fffdf8] shadow-sm">
             <div className="flex flex-col gap-3 border-b border-[#e5dfd4] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -461,7 +575,9 @@ export default function NewPostPage() {
 
               <button
                 type="button"
-                onClick={() => setPreview(!preview)}
+                onClick={() =>
+                  setPreview((current) => !current)
+                }
                 className="rounded-full border border-[#cfc6b6] bg-[#f8f4eb] px-4 py-2 text-xs font-bold text-[#172033] transition hover:border-[#b88a44] hover:bg-[#eee8dc]"
               >
                 {preview
@@ -472,6 +588,8 @@ export default function NewPostPage() {
 
             {!preview ? (
               <div className="p-5 sm:p-6">
+                {/* IMAGE UPLOAD */}
+
                 <div className="mb-4 flex flex-wrap items-center gap-3">
                   <label
                     htmlFor="contentImage"
@@ -496,10 +614,12 @@ export default function NewPostPage() {
                   />
 
                   <span className="text-[11px] text-[#99968e]">
-                    Upload an image and it will be inserted into
-                    your Markdown.
+                    Upload an image and it will be inserted
+                    into your Markdown.
                   </span>
                 </div>
+
+                {/* CONTENT */}
 
                 <textarea
                   id="content"
@@ -537,7 +657,8 @@ According to historical records...
                   <span>Markdown supported</span>
 
                   <span>
-                    {content.length.toLocaleString()} characters
+                    {content.length.toLocaleString()}{" "}
+                    characters
                   </span>
                 </div>
               </div>
@@ -545,7 +666,9 @@ According to historical records...
               <div className="p-5 sm:p-8">
                 {content.trim() ? (
                   <div className="markdown-content max-w-none">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                    >
                       {content}
                     </ReactMarkdown>
                   </div>
@@ -560,7 +683,8 @@ According to historical records...
                     </p>
 
                     <p className="mt-2 text-sm text-[#77776f]">
-                      Paste some Markdown into the editor first.
+                      Paste some Markdown into the editor
+                      first.
                     </p>
                   </div>
                 )}
@@ -568,7 +692,9 @@ According to historical records...
             )}
           </section>
 
-          {/* PUBLISHING */}
+          {/* =================================================
+              PUBLISHING
+              ================================================= */}
 
           <section className="rounded-xl border border-[#d8d0c0] bg-[#fffdf8] shadow-sm">
             <div className="border-b border-[#e5dfd4] px-5 py-4 sm:px-6">
@@ -595,8 +721,8 @@ According to historical records...
                   </span>
 
                   <span className="mt-1 block text-xs leading-5 text-[#77776f]">
-                    The story will appear on the public website
-                    immediately.
+                    The story will appear on the public
+                    website immediately.
                   </span>
                 </span>
               </label>
@@ -611,11 +737,14 @@ According to historical records...
 
                 <button
                   type="submit"
-                  className="rounded-full bg-[#172033] px-6 py-2.5 text-sm font-bold text-[#f5f1e8] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#8e3b32]"
+                  disabled={submitting}
+                  className="rounded-full bg-[#172033] px-6 py-2.5 text-sm font-bold text-[#f5f1e8] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#8e3b32] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {isPublished
-                    ? "Publish Story"
-                    : "Save Draft"}
+                  {submitting
+                    ? "Publishing..."
+                    : isPublished
+                      ? "Publish Story"
+                      : "Save Draft"}
                 </button>
               </div>
             </div>

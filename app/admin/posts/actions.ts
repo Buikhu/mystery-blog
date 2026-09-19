@@ -1,43 +1,131 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-
 import { supabase } from "@/lib/supabase";
-
-import { redirect } from "next/navigation";
-
 import { requireAdmin } from "@/lib/auth";
-
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
-function createFileName(file: File) {
-  const fileExtension =
-    file.name.split(".").pop()?.toLowerCase() || "jpg";
+const ALLOWED_CATEGORIES = [
+  "Unsolved Mysteries",
+  "Strange Events",
+  "Bizarre Figures",
+];
 
-  const safeFileName = file.name
-    .replace(/\.[^/.]+$/, "")
-    .replace(/[^a-zA-Z0-9-_]/g, "-")
-    .toLowerCase();
+/* =========================================================
+   HELPERS
+   ========================================================= */
 
-  return `${Date.now()}-${safeFileName}-${crypto.randomUUID()}.${fileExtension}`;
+function getString(formData: FormData, key: string) {
+  return formData.get(key)?.toString().trim() || "";
 }
 
-function validateImage(file: FormDataEntryValue | null) {
-  if (!(file instanceof File) || file.size === 0) {
+function parseTags(tagsInput: string) {
+  if (!tagsInput) {
+    return [];
+  }
+
+  return [
+    ...new Set(
+      tagsInput
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+    ),
+  ];
+}
+
+function validateSlug(slug: string) {
+  if (!slug) {
+    throw new Error("Slug is required.");
+  }
+
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+    throw new Error(
+      "Slug can only contain lowercase letters, numbers, and hyphens."
+    );
+  }
+}
+
+function validateCategory(category: string) {
+  if (!ALLOWED_CATEGORIES.includes(category)) {
+    throw new Error("Invalid category.");
+  }
+}
+
+function validateImage(
+  value: FormDataEntryValue | null
+): File {
+  if (!(value instanceof File) || value.size === 0) {
     throw new Error("Please select an image.");
   }
 
-  if (!file.type.startsWith("image/")) {
+  if (!value.type.startsWith("image/")) {
     throw new Error("Only image files are allowed.");
   }
 
-  if (file.size > MAX_IMAGE_SIZE) {
+  if (value.size > MAX_IMAGE_SIZE) {
     throw new Error("Image must be smaller than 5MB.");
   }
 
-  return file;
+  return value;
+}
+
+function createFileName(file: File) {
+  const extension =
+    file.name.split(".").pop()?.toLowerCase() || "jpg";
+
+  const baseName = file.name
+    .replace(/\.[^/.]+$/, "")
+    .replace(/[^a-zA-Z0-9_-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+
+  return `${Date.now()}-${baseName || "image"}-${crypto.randomUUID()}.${extension}`;
+}
+
+/* =========================================================
+   SUPABASE UPLOAD
+   ========================================================= */
+
+async function uploadToSupabase(
+  file: File,
+  folder: "articles" | "thumbnails"
+) {
+  const fileName = createFileName(file);
+  const filePath = `${folder}/${fileName}`;
+
+  const fileBuffer = await file.arrayBuffer();
+
+  const { error } = await supabase.storage
+    .from("images")
+    .upload(filePath, fileBuffer, {
+      contentType: file.type,
+      upsert: false,
+    });
+
+  if (error) {
+    console.error("Supabase upload error:", error);
+
+    throw new Error(
+      `Image upload failed: ${error.message}`
+    );
+  }
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage
+    .from("images")
+    .getPublicUrl(filePath);
+
+  return {
+    publicUrl,
+    filePath,
+    originalName: file.name,
+  };
 }
 
 /* =========================================================
@@ -49,39 +137,14 @@ export async function uploadImage(formData: FormData) {
 
   const image = validateImage(formData.get("image"));
 
-  const fileName = createFileName(image);
-
-  const filePath = `articles/${fileName}`;
-
-  const fileBuffer = await image.arrayBuffer();
-
-  const { error: uploadError } = await supabase.storage
-    .from("images")
-    .upload(filePath, fileBuffer, {
-      contentType: image.type,
-      upsert: false,
-    });
-
-  if (uploadError) {
-    console.error(
-      "Supabase image upload error:",
-      uploadError
-    );
-
-    throw new Error(
-      `Supabase upload failed: ${uploadError.message}`
-    );
-  }
-
-  const {
-    data: { publicUrl },
-  } = supabase.storage
-    .from("images")
-    .getPublicUrl(filePath);
+  const result = await uploadToSupabase(
+    image,
+    "articles"
+  );
 
   return {
-    url: publicUrl,
-    fileName: image.name,
+    url: result.publicUrl,
+    fileName: result.originalName,
   };
 }
 
@@ -92,106 +155,144 @@ export async function uploadImage(formData: FormData) {
 export async function createPost(formData: FormData) {
   await requireAdmin();
 
-  const title = formData.get("title")?.toString().trim();
+  /* -------------------------
+     Get data
+     ------------------------- */
 
-  const slug = formData.get("slug")?.toString().trim();
-
-  const category = formData.get("category")?.toString().trim();
-
-  const summary = formData.get("summary")?.toString().trim();
-
-  const sources = formData.get("sources")?.toString().trim();
-
-  const tagsInput = formData.get("tags")?.toString().trim();
-
-  const content = formData.get("content")?.toString().trim();
+  const title = getString(formData, "title");
+  const slug = getString(formData, "slug");
+  const category = getString(formData, "category");
+  const summary = getString(formData, "summary");
+  const sources = getString(formData, "sources");
+  const tagsInput = getString(formData, "tags");
+  const content = getString(formData, "content");
 
   const isPublished =
     formData.get("isPublished") === "on";
+
+  /* -------------------------
+     Validate required fields
+     ------------------------- */
+
+  if (!title) {
+    throw new Error("Title is required.");
+  }
+
+  if (!slug) {
+    throw new Error("Slug is required.");
+  }
+
+  if (!category) {
+    throw new Error("Category is required.");
+  }
+
+  if (!summary) {
+    throw new Error("Summary is required.");
+  }
+
+  if (!content) {
+    throw new Error("Content is required.");
+  }
+
+  validateSlug(slug);
+  validateCategory(category);
+
+  /* -------------------------
+     Check duplicate slug
+     ------------------------- */
+
+  const existingPost = await prisma.post.findUnique({
+    where: {
+      slug,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (existingPost) {
+    throw new Error(
+      `A post with slug "${slug}" already exists.`
+    );
+  }
+
+  /* -------------------------
+     Thumbnail
+     ------------------------- */
 
   const thumbnail = validateImage(
     formData.get("thumbnail")
   );
 
-  /* Validate required fields */
+  /* -------------------------
+     Tags
+     ------------------------- */
 
-  if (
-    !title ||
-    !slug ||
-    !category ||
-    !summary ||
-    !content
-  ) {
-    throw new Error(
-      "Please fill in all required fields."
-    );
-  }
+  const tags = parseTags(tagsInput);
 
-  /* Upload thumbnail */
+  /* -------------------------
+     Upload thumbnail
+     ------------------------- */
 
-  const fileName = createFileName(thumbnail);
+  const uploadedThumbnail = await uploadToSupabase(
+    thumbnail,
+    "thumbnails"
+  );
 
-  const filePath = `thumbnails/${fileName}`;
+  /* -------------------------
+     Create post
+     ------------------------- */
 
-  const fileBuffer = await thumbnail.arrayBuffer();
-
-  const { error: uploadError } = await supabase.storage
-    .from("images")
-    .upload(filePath, fileBuffer, {
-      contentType: thumbnail.type,
-      upsert: false,
+  try {
+    await prisma.post.create({
+      data: {
+        title,
+        slug,
+        category,
+        summary,
+        sources: sources || null,
+        thumbnailUrl: uploadedThumbnail.publicUrl,
+        tags,
+        content,
+        isPublished,
+      },
     });
+  } catch (error) {
+    console.error("Create post error:", error);
 
-  if (uploadError) {
-    console.error(
-      "Supabase thumbnail upload error:",
-      uploadError
-    );
+    /*
+      Nếu database create thất bại,
+      xóa thumbnail vừa upload.
+    */
+
+    try {
+      await supabase.storage
+        .from("images")
+        .remove([uploadedThumbnail.filePath]);
+    } catch (cleanupError) {
+      console.error(
+        "Failed to cleanup thumbnail:",
+        cleanupError
+      );
+    }
 
     throw new Error(
-      "Failed to upload thumbnail."
+      "Failed to create post. Please check your data and try again."
     );
   }
 
-  /* Get public thumbnail URL */
-
-  const {
-    data: { publicUrl },
-  } = supabase.storage
-    .from("images")
-    .getPublicUrl(filePath);
-
-  /* Convert tags */
-
-  const tags = tagsInput
-    ? tagsInput
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter(Boolean)
-    : [];
-
-  /* Create database record */
-
-  await prisma.post.create({
-    data: {
-      title,
-      slug,
-      category,
-      summary,
-      sources: sources || null,
-      thumbnailUrl: publicUrl,
-      tags,
-      content,
-      isPublished,
-    },
-  });
-
-  /* Clear cache */
+  /* -------------------------
+     Clear cache
+     ------------------------- */
 
   revalidatePath("/");
   revalidatePath("/admin");
   revalidatePath("/category/[slug]", "page");
   revalidatePath(`/posts/${slug}`);
+
+  /* -------------------------
+     Redirect
+     ------------------------- */
 
   redirect("/admin");
 }
@@ -205,93 +306,142 @@ export async function updatePost(formData: FormData) {
 
   const id = Number(formData.get("id"));
 
-  const title = formData.get("title")?.toString().trim();
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error("Invalid post ID.");
+  }
 
-  const slug = formData.get("slug")?.toString().trim();
-
-  const category = formData.get("category")?.toString().trim();
-
-  const summary = formData.get("summary")?.toString().trim();
-
-  const sources = formData.get("sources")?.toString().trim();
-
-  const thumbnailUrl = formData
-    .get("thumbnailUrl")
-    ?.toString()
-    .trim();
-
-  const tagsInput = formData.get("tags")?.toString().trim();
-
-  const content = formData.get("content")?.toString().trim();
+  const title = getString(formData, "title");
+  const slug = getString(formData, "slug");
+  const category = getString(formData, "category");
+  const summary = getString(formData, "summary");
+  const sources = getString(formData, "sources");
+  const thumbnailUrl = getString(
+    formData,
+    "thumbnailUrl"
+  );
+  const tagsInput = getString(formData, "tags");
+  const content = getString(formData, "content");
 
   const isPublished =
     formData.get("isPublished") === "on";
 
-  /* Validate required fields */
+  /* -------------------------
+     Validate
+     ------------------------- */
 
-  if (
-    !id ||
-    !title ||
-    !slug ||
-    !category ||
-    !summary ||
-    !thumbnailUrl ||
-    !content
-  ) {
-    throw new Error(
-      "Please fill in all required fields."
-    );
+  if (!title) {
+    throw new Error("Title is required.");
   }
 
-  /* Get old slug */
+  if (!slug) {
+    throw new Error("Slug is required.");
+  }
+
+  if (!category) {
+    throw new Error("Category is required.");
+  }
+
+  if (!summary) {
+    throw new Error("Summary is required.");
+  }
+
+  if (!thumbnailUrl) {
+    throw new Error("Thumbnail is required.");
+  }
+
+  if (!content) {
+    throw new Error("Content is required.");
+  }
+
+  validateSlug(slug);
+  validateCategory(category);
+
+  /* -------------------------
+     Get old post
+     ------------------------- */
 
   const oldPost = await prisma.post.findUnique({
     where: {
       id,
     },
     select: {
+      id: true,
       slug: true,
     },
   });
 
-  /* Convert tags */
+  if (!oldPost) {
+    throw new Error("Post not found.");
+  }
 
-  const tags = tagsInput
-    ? tagsInput
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter(Boolean)
-    : [];
+  /* -------------------------
+     Check duplicate slug
+     ------------------------- */
 
-  /* Update database */
+  const duplicatePost =
+    await prisma.post.findFirst({
+      where: {
+        slug,
+        NOT: {
+          id,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
 
-  await prisma.post.update({
-    where: {
-      id,
-    },
-    data: {
-      title,
-      slug,
-      category,
-      summary,
-      sources: sources || null,
-      thumbnailUrl,
-      tags,
-      content,
-      isPublished,
-    },
-  });
+  if (duplicatePost) {
+    throw new Error(
+      `A post with slug "${slug}" already exists.`
+    );
+  }
 
-  /* Clear cache */
+  /* -------------------------
+     Tags
+     ------------------------- */
+
+  const tags = parseTags(tagsInput);
+
+  /* -------------------------
+     Update
+     ------------------------- */
+
+  try {
+    await prisma.post.update({
+      where: {
+        id,
+      },
+      data: {
+        title,
+        slug,
+        category,
+        summary,
+        sources: sources || null,
+        thumbnailUrl,
+        tags,
+        content,
+        isPublished,
+      },
+    });
+  } catch (error) {
+    console.error("Update post error:", error);
+
+    throw new Error(
+      "Failed to update post. Please try again."
+    );
+  }
+
+  /* -------------------------
+     Clear cache
+     ------------------------- */
 
   revalidatePath("/");
   revalidatePath("/admin");
   revalidatePath("/category/[slug]", "page");
   revalidatePath(`/posts/${slug}`);
 
-  /* Clear old post URL if slug changed */
-
-  if (oldPost && oldPost.slug !== slug) {
+  if (oldPost.slug !== slug) {
     revalidatePath(`/posts/${oldPost.slug}`);
   }
 
@@ -307,17 +457,20 @@ export async function deletePost(formData: FormData) {
 
   const id = Number(formData.get("id"));
 
-  if (!id) {
+  if (!Number.isInteger(id) || id <= 0) {
     throw new Error("Invalid post ID.");
   }
 
-  /* Get post slug before deleting */
+  /* -------------------------
+     Find post
+     ------------------------- */
 
   const post = await prisma.post.findUnique({
     where: {
       id,
     },
     select: {
+      id: true,
       slug: true,
     },
   });
@@ -326,13 +479,27 @@ export async function deletePost(formData: FormData) {
     throw new Error("Post not found.");
   }
 
-  await prisma.post.delete({
-    where: {
-      id,
-    },
-  });
+  /* -------------------------
+     Delete
+     ------------------------- */
 
-  /* Clear cache */
+  try {
+    await prisma.post.delete({
+      where: {
+        id,
+      },
+    });
+  } catch (error) {
+    console.error("Delete post error:", error);
+
+    throw new Error(
+      "Failed to delete post. Please try again."
+    );
+  }
+
+  /* -------------------------
+     Clear cache
+     ------------------------- */
 
   revalidatePath("/");
   revalidatePath("/admin");
